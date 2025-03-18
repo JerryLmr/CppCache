@@ -12,10 +12,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 file(GLOB SOURCES "*.cpp")
 
 # 设置目标可执行文件
-add_executable(main ${SOURCES})
+add_executable(CppCacheSystem ${SOURCES})
 
-# 清理中间的 .o 文件
-set_target_properties(main PROPERTIES CLEAN_DIRECT_OUTPUT 1)
+# 可选的编译选项
+# target_compile_options(CppCacheSystem PRIVATE -Wall -Wextra -O2)
 
-# 额外的编译选项（可根据需要启用）
-# target_compile_options(main PRIVATE -Wall -Wextra -O2)
+# 清理中间的 .o 文件（如果需要）
+# set_target_properties(CppCacheSystem PROPERTIES CLEAN_DIRECT_OUTPUT 1)
