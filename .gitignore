@@ -4,6 +4,7 @@ CMakeFiles/
 cmake_install.cmake
 Makefile
 compile_commands.json
+.vscode/
 
 # 忽略 CMake 生成的 VSCode 构建文件
 build/
