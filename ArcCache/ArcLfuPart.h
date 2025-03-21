@@ -25,33 +25,170 @@ public:
         initializeLists();
     }
 
-    bool put(Key key, Value value) {}
+    bool put(Key key, Value value) 
+    {
+        if (capacity_ == 0)
+            return false;
 
-    bool get(Key key, Value& value) {}
+        std::lock_guard<std::mutex>lock(mutex_);
+        auto it = mainCache_.find(key);
+        if (it != mainCache_.end())
+        {
+            return updateExistingNode(it->second, value);
+        }
+        return addNewNode(key, value);
+    }
 
-    bool checkGhost(Key key) {}
+    bool get(Key key, Value& value) 
+    {
+        std::lock_guard<std::mutex>lock(mutex_);
+        auto it = mainCache_.find(key);
+        if (it != mainCache_.end())
+        {
+            updateNodeFrequency(it->second);
+            value = it->second->getValue();
+            return true;
+        }
+        return false;
+    }
+
+    bool checkGhost(Key key) 
+    {
+        auto it = ghostCache_.find(key);
+        if (it != ghostCache_.end())
+        {
+            removeFromGhost(it->second);
+            ghostCache_.erase(it);
+            return true;
+        }
+        return false;
+    }
 
     void increaseCapacity() { ++capacity_; }
 
-    bool decreaseCapacity() {}
+    bool decreaseCapacity() 
+    {
+        if (capacity_ <= 0)
+            return false;
+
+        if (mainCache_.size() >= capacity_)
+        {
+            evictLeastFrequent();
+        }
+        --capacity_;
+        return true;
+    }
 
     
 private:
-    void initializeLists() {}
+    void initializeLists() 
+    {
+        ghostHead_ = std::make_shared<NodeType>();
+        ghostTail_ = std::make_shared<NodeType>();
+        ghostHead_->next_ = ghostTail_;
+        ghostTail_->prev_ = ghostHead_;
+    }
 
-    bool updateExistingNode(NodePtr node, const Value& value) {}
+    bool updateExistingNode(NodePtr node, const Value& value) 
+    {
+        node->set_Value(value);
+        updateNodeFrequency(node);
+        return true;
+    }
 
-    bool addNewNode(const Key& key, const Value& value) {}
+    bool addNewNode(const Key& key, const Value& value) 
+    {
+        if (mainCache_.size() >= capacity_)
+        {
+            evictLeastFrequent();
+        }
 
-    void updateNodeFrequency(NodePtr node) {}
+        NodePtr newnode = std::make_shared<NodeType>(key, value);
+        mainCache_[key] = newnode;
 
-    void evictLeastFrequent(){}
+        if (freqMap_.find(1) == freqMap_.end())
+        {
+            freqMap_[1] = std::list<NodePtr>();
+        }
+        freqMap_[1].push_back(newnode);
+        minFreq_ = 1;
 
-    void removeFromGhost(NodePtr node){}
+        return true;
+    }
 
-    void addToGhost(NodePtr node){}
+    void updateNodeFrequency(NodePtr node) 
+    {
+        size_t oldFreq = node->getAccessCount();
+        node->increaseAccessCount();
+        size_t newFreq = node->getAccessCount();
 
-    void removeOldestGhost() {}
+        auto& oldList = freqMap_[oldFreq];
+        oldList.remove(node);
+        if (oldList.empty())
+        {
+            freqMap_.erase(oldFreq);
+            if (oldFreq == minFreq_)
+                minFreq_ = newFreq;
+        }
+
+        if (freqMap_.find(newFreq) == freqMap_.end())
+        {
+            freqMap_[newFreq] = std::list<NodePtr>();
+        }
+        freqMap_[newFreq].push_back(node);
+    }
+
+    void evictLeastFrequent()
+    {
+        if (freqMap_.empty())
+            return;
+
+        auto& minFreqList = freqMap_[minFreq_];
+        if (minFreqList.empty())
+            return;
+
+        NodePtr leastNode = minFreqList.front();
+        minFreqList.pop_front();
+
+        if(minFreqList.empty())
+        {
+            freqMap_.erase(minFreq_);
+            if (!freqMap_.empty())
+            {
+                minFreq_ = freqMap_.begin()->first;
+            }
+        }
+
+        if (ghostCache_.size() >= ghostCapacity_)
+        {
+            removeOldestGhost();
+        }
+        addToGhost(leastNode);
+        mainCache_.erase(leastNode->getKey());
+    }
+
+    void removeFromGhost(NodePtr node)
+    {
+        node->prev_->next_ = node->next_;
+        node->next_->prev_ = node->prev_;
+    }
+
+    void addToGhost(NodePtr node)
+    {
+        node->next_ = ghostTail_;
+        node->prev_ = ghostTail_->prev_;
+        ghostTail_->prev_->next_ = node;
+        ghostTail_->prev_ = node;
+    }
+
+    void removeOldestGhost() 
+    {
+        NodePtr oldestGhost = ghostHead_->next_;
+        if (oldestGhost != ghostTail_) {
+            removeFromGhost(oldestGhost);
+            ghostCache_.erase(oldestGhost->getKey());
+        }
+    }
 private:
     size_t capacity_;
     size_t ghostCapacity_;
